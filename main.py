@@ -144,18 +144,19 @@ def main(args: DictConfig):
         for epoch in range(args.train.epochs):
             total_loss = 0
             print("on epoch: {}".format(epoch+1))
-            prev_event_image = train_data[0]["event_volume"].to(device)[0].expand(args.data_loader.train.batch_size, 4, 480 ,640)
             for i, batch in enumerate(tqdm(train_data)):
                 batch: Dict[str, Any]
                 event_image = batch["event_volume"].to(device) # [B, 4, 480, 640]
+                if i == 0:
+                    prev_event_image = event_image[0].expand(args.data_loader.train.batch_size, 4, 480 ,640)
                 for j in range(input_num-1):
                     prev_in_batch = event_image[j+1:,:,:,:]
                     prev_not_in_batch = prev_event_image[args.data_loader.train.batch_size-j-1:,:,:,:]
                     prev = torch.cat((prev_not_in_batch, prev_in_batch), dim=0)
-                    event_image = torch.cat((event_image, prev), dim=1)
+                    cat_event_image = torch.cat((event_image, prev), dim=1)
                 prev_event_image = event_image
                 ground_truth_flow = batch["flow_gt"].to(device) # [B, 2, 480, 640]
-                flow = model(event_image) # [B, 2, 480, 640]
+                flow = model(cat_event_image) # [B, 2, 480, 640]
                 loss: torch.Tensor = compute_epe_error(flow, ground_truth_flow)
                 print(f"batch {i} loss: {loss.item()}")
                 optimizer.zero_grad()
@@ -180,14 +181,33 @@ def main(args: DictConfig):
     model.load_state_dict(torch.load(model_path, map_location=device))
     model.eval()
     flow: torch.Tensor = torch.tensor([]).to(device)
-    with torch.no_grad():
-        print("start test")
-        for batch in tqdm(test_data):
-            batch: Dict[str, Any]
-            event_image = batch["event_volume"].to(device)
-            batch_flow = model(event_image) # [1, 2, 480, 640]
-            flow = torch.cat((flow, batch_flow), dim=0)  # [N, 2, 480, 640]
-        print("test done")
+    if input_num == 1:
+        with torch.no_grad():
+            print("start test")
+            for batch in tqdm(test_data):
+                batch: Dict[str, Any]
+                event_image = batch["event_volume"].to(device)
+                batch_flow = model(event_image) # [1, 2, 480, 640]
+                flow = torch.cat((flow, batch_flow), dim=0)  # [N, 2, 480, 640]
+            print("test done")
+    else:
+        assert args.data_loader.test.batch_size == 1
+        with torch.no_grad():
+            print("start test")
+            prev_event_images = []
+            for i, batch in enumerate(tqdm(test_data)):
+                batch: Dict[str, Any]
+                event_image = batch["event_volume"].to(device)
+                if i == 0:
+                    for cnt in range(input_num-1):
+                        prev_event_images.append(event_image)
+                for j in range(input_num-1):
+                    cat_event_image = torch.cat((event_image, prev_event_images[input_num-j-2]), dim=1)
+                _ = prev_event_images.pop(0)
+                prev_event_images.append(event_image)
+                batch_flow = model(cat_event_image) # [1, 2, 480, 640]
+                flow = torch.cat((flow, batch_flow), dim=0)  # [N, 2, 480, 640]
+            print("test done")        
     # ------------------
     #  save submission
     # ------------------
