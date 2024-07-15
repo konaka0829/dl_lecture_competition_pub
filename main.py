@@ -149,11 +149,12 @@ def main(args: DictConfig):
                 event_image = batch["event_volume"].to(device) # [B, 4, 480, 640]
                 if i == 0:
                     prev_event_image = event_image[0].expand(args.data_loader.train.batch_size, 4, 480 ,640)
+                cat_event_image = event_image
                 for j in range(input_num-1):
                     prev_in_batch = event_image[j+1:,:,:,:]
                     prev_not_in_batch = prev_event_image[args.data_loader.train.batch_size-j-1:,:,:,:]
                     prev = torch.cat((prev_not_in_batch, prev_in_batch), dim=0)
-                    cat_event_image = torch.cat((event_image, prev), dim=1)
+                    cat_event_image = torch.cat((cat_event_image, prev), dim=1)
                 prev_event_image = event_image
                 ground_truth_flow = batch["flow_gt"].to(device) # [B, 2, 480, 640]
                 flow = model(cat_event_image) # [B, 2, 480, 640]
@@ -201,8 +202,9 @@ def main(args: DictConfig):
                 if i == 0:
                     for cnt in range(input_num-1):
                         prev_event_images.append(event_image)
+                cat_event_image = event_image
                 for j in range(input_num-1):
-                    cat_event_image = torch.cat((event_image, prev_event_images[input_num-j-2]), dim=1)
+                    cat_event_image = torch.cat((cat_event_image, prev_event_images[input_num-j-2]), dim=1)
                 _ = prev_event_images.pop(0)
                 prev_event_images.append(event_image)
                 batch_flow = model(cat_event_image) # [1, 2, 480, 640]
