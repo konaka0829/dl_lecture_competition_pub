@@ -107,6 +107,7 @@ def main(args: DictConfig):
         Key: seq_name, Type: list
         Key: event_volume, Type: torch.Tensor, Shape: torch.Size([Batch, 4, 480, 640]) => イベントデータのバッチ
     '''
+
     # ------------------
     #       Model
     # ------------------
@@ -115,27 +116,54 @@ def main(args: DictConfig):
     # ------------------
     #   optimizer
     # ------------------
-    optimizer = torch.optim.Adam(model.parameters(), lr=args.train.initial_learning_rate, weight_decay=args.train.weight_decay)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=args.train.initial_learning_rate, weight_decay=args.train.weight_decay)
     # ------------------
     #   Start training
     # ------------------
+    input_num = args.train.multiple_input
+    assert input_num <= args.data_loader.train.batch_size + 1
     model.train()
-    for epoch in range(args.train.epochs):
-        total_loss = 0
-        print("on epoch: {}".format(epoch+1))
-        for i, batch in enumerate(tqdm(train_data)):
-            batch: Dict[str, Any]
-            event_image = batch["event_volume"].to(device) # [B, 4, 480, 640]
-            ground_truth_flow = batch["flow_gt"].to(device) # [B, 2, 480, 640]
-            flow = model(event_image) # [B, 2, 480, 640]
-            loss: torch.Tensor = compute_epe_error(flow, ground_truth_flow)
-            print(f"batch {i} loss: {loss.item()}")
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
+    if input_num == 1:
+        for epoch in range(args.train.epochs):
+            total_loss = 0
+            print("on epoch: {}".format(epoch+1))
+            for i, batch in enumerate(tqdm(train_data)):
+                batch: Dict[str, Any]
+                event_image = batch["event_volume"].to(device) # [B, 4, 480, 640]
+                ground_truth_flow = batch["flow_gt"].to(device) # [B, 2, 480, 640]
+                flow = model(event_image) # [B, 2, 480, 640]
+                loss: torch.Tensor = compute_epe_error(flow, ground_truth_flow)
+                print(f"batch {i} loss: {loss.item()}")
+                optimizer.zero_grad()
+                loss.backward()
+                optimizer.step()
 
-            total_loss += loss.item()
-        print(f'Epoch {epoch+1}, Loss: {total_loss / len(train_data)}')
+                total_loss += loss.item()
+            print(f'Epoch {epoch+1}, Loss: {total_loss / len(train_data)}')
+    else:
+        for epoch in range(args.train.epochs):
+            total_loss = 0
+            print("on epoch: {}".format(epoch+1))
+            prev_event_image = train_data[0]["event_volume"].to(device)[0].expand(args.data_loader.train.batch_size, 4, 480 ,640)
+            for i, batch in enumerate(tqdm(train_data)):
+                batch: Dict[str, Any]
+                event_image = batch["event_volume"].to(device) # [B, 4, 480, 640]
+                for j in range(input_num-1):
+                    prev_in_batch = event_image[j+1:,:,:,:]
+                    prev_not_in_batch = prev_event_image[args.data_loader.train.batch_size-j-1:,:,:,:]
+                    prev = torch.cat((prev_not_in_batch, prev_in_batch), dim=0)
+                    event_image = torch.cat((event_image, prev), dim=1)
+                prev_event_image = event_image
+                ground_truth_flow = batch["flow_gt"].to(device) # [B, 2, 480, 640]
+                flow = model(event_image) # [B, 2, 480, 640]
+                loss: torch.Tensor = compute_epe_error(flow, ground_truth_flow)
+                print(f"batch {i} loss: {loss.item()}")
+                optimizer.zero_grad()
+                loss.backward()
+                optimizer.step()
+
+                total_loss += loss.item()
+            print(f'Epoch {epoch+1}, Loss: {total_loss / len(train_data)}')
 
     # Create the directory if it doesn't exist
     if not os.path.exists('checkpoints'):
