@@ -150,7 +150,7 @@ def main(args: DictConfig):
                     prev_event_image = event_image
                     prev_ground_truth_flow = ground_truth_flow
                 else:
-                    next_prev_event_image = torch.cat((prev_event_image[1:,:,:,:],event_image[0]),dim=0)
+                    next_prev_event_image = torch.cat((prev_event_image[1:,:,:,:],event_image[:1]),dim=0)
                     cat_event_image = torch.cat((prev_event_image,next_prev_event_image),dim=1)
                     prev_event_image = event_image
                     flow = model(cat_event_image)
@@ -163,7 +163,7 @@ def main(args: DictConfig):
 
                     total_loss += loss.item()
             
-            next_prev_event_image = torch.cat((prev_event_image[1:,:,:,:],prev_event_image[-1]),dim=0)
+            next_prev_event_image = torch.cat((prev_event_image[1:,:,:,:],prev_event_image[-1:]),dim=0)
             cat_event_image = torch.cat((prev_event_image,next_prev_event_image),dim=1)
             flow = model(cat_event_image)
             loss: torch.Tensor = compute_epe_error(flow, prev_ground_truth_flow)
