@@ -126,10 +126,18 @@ def main(args: DictConfig):
         print("on epoch: {}".format(epoch+1))
         for i, batch in enumerate(tqdm(train_data)):
             batch: Dict[str, Any]
-            event_image = batch["event_volume"].to(device) # [B, 4, 480, 640]
+            event_image_old = batch["event_volume_old"].to(device) # [B, 4, 480, 640]
+            event_image_new = batch["event_volume_new"].to(device)
+            if args.train.multiple_input == True:
+                event_image = torch.cat((event_image_old,event_image_new),dim=0)
+            else:
+                event_image = event_image_old
             ground_truth_flow = batch["flow_gt"].to(device) # [B, 2, 480, 640]
             flow = model(event_image) # [B, 2, 480, 640]
             loss: torch.Tensor = compute_epe_error(flow, ground_truth_flow)
+            if args.train.l1_regularization == True:
+                for j in model.parameters():
+                    loss += torch.sum(torch.abs(j)) * args.train.l1_regularization_weight
             print(f"batch {i} loss: {loss.item()}")
             optimizer.zero_grad()
             loss.backward()
@@ -157,7 +165,12 @@ def main(args: DictConfig):
         print("start test")
         for batch in tqdm(test_data):
             batch: Dict[str, Any]
-            event_image = batch["event_volume"].to(device)
+            event_image_old = batch["event_volume_old"].to(device) 
+            event_image_new = batch["event_volume_new"].to(device)
+            if args.train.multiple_input == True:
+                event_image = torch.cat((event_image_old,event_image_new),dim=0)
+            else:
+                event_image = event_image_old
             batch_flow = model(event_image) # [1, 2, 480, 640]
             flow = torch.cat((flow, batch_flow), dim=0)  # [N, 2, 480, 640]
         print("test done")
