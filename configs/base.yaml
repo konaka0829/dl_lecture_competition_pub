@@ -15,4 +15,4 @@ train:
   initial_learning_rate: 0.01
   weight_decay: 0.0001
   epochs: 10
-  multiple_input: 3
+  consider_difference: True

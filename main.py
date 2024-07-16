@@ -120,10 +120,8 @@ def main(args: DictConfig):
     # ------------------
     #   Start training
     # ------------------
-    input_num = args.train.multiple_input
-    assert input_num <= args.data_loader.train.batch_size + 1
     model.train()
-    if input_num == 1:
+    if args.train.consider_difference == False:
         for epoch in range(args.train.epochs):
             total_loss = 0
             print("on epoch: {}".format(epoch+1))
@@ -147,24 +145,35 @@ def main(args: DictConfig):
             for i, batch in enumerate(tqdm(train_data)):
                 batch: Dict[str, Any]
                 event_image = batch["event_volume"].to(device) # [B, 4, 480, 640]
+                ground_truth_flow = batch["flow_gt"].to(device)
                 if i == 0:
-                    prev_event_image = event_image[0].expand(args.data_loader.train.batch_size, 4, 480 ,640)
-                cat_event_image = event_image
-                for j in range(input_num-1):
-                    prev_in_batch = event_image[j+1:,:,:,:]
-                    prev_not_in_batch = prev_event_image[args.data_loader.train.batch_size-j-1:,:,:,:]
-                    prev = torch.cat((prev_not_in_batch, prev_in_batch), dim=0)
-                    cat_event_image = torch.cat((cat_event_image, prev), dim=1)
-                prev_event_image = event_image
-                ground_truth_flow = batch["flow_gt"].to(device) # [B, 2, 480, 640]
-                flow = model(cat_event_image) # [B, 2, 480, 640]
-                loss: torch.Tensor = compute_epe_error(flow, ground_truth_flow)
-                print(f"batch {i} loss: {loss.item()}")
-                optimizer.zero_grad()
-                loss.backward()
-                optimizer.step()
+                    prev_event_image = event_image
+                    prev_ground_truth_flow = ground_truth_flow
+                else:
+                    next_prev_event_image = torch.cat((prev_event_image[1:,:,:,:],event_image[0]),dim=0)
+                    cat_event_image = torch.cat((prev_event_image,next_prev_event_image),dim=1)
+                    prev_event_image = event_image
+                    flow = model(cat_event_image)
+                    loss: torch.Tensor = compute_epe_error(flow, prev_ground_truth_flow)
+                    prev_ground_truth_flow = ground_truth_flow
+                    print(f"batch {i-1} loss: {loss.item()}")
+                    optimizer.zero_grad()
+                    loss.backward()
+                    optimizer.step()
 
-                total_loss += loss.item()
+                    total_loss += loss.item()
+            
+            next_prev_event_image = torch.cat((prev_event_image[1:,:,:,:],prev_event_image[-1]),dim=0)
+            cat_event_image = torch.cat((prev_event_image,next_prev_event_image),dim=1)
+            flow = model(cat_event_image)
+            loss: torch.Tensor = compute_epe_error(flow, prev_ground_truth_flow)
+            print(f"batch {252} loss: {loss.item()}")
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+
+            total_loss += loss.item()
+
             print(f'Epoch {epoch+1}, Loss: {total_loss / len(train_data)}')
 
     # Create the directory if it doesn't exist
