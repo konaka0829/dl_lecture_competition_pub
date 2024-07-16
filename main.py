@@ -191,7 +191,7 @@ def main(args: DictConfig):
     model.load_state_dict(torch.load(model_path, map_location=device))
     model.eval()
     flow: torch.Tensor = torch.tensor([]).to(device)
-    if input_num == 1:
+    if args.train.consider_difference == False:
         with torch.no_grad():
             print("start test")
             for batch in tqdm(test_data):
@@ -201,23 +201,21 @@ def main(args: DictConfig):
                 flow = torch.cat((flow, batch_flow), dim=0)  # [N, 2, 480, 640]
             print("test done")
     else:
-        assert args.data_loader.test.batch_size == 1
         with torch.no_grad():
             print("start test")
-            prev_event_images = []
             for i, batch in enumerate(tqdm(test_data)):
                 batch: Dict[str, Any]
                 event_image = batch["event_volume"].to(device)
                 if i == 0:
-                    for cnt in range(input_num-1):
-                        prev_event_images.append(event_image)
-                cat_event_image = event_image
-                for j in range(input_num-1):
-                    cat_event_image = torch.cat((cat_event_image, prev_event_images[input_num-j-2]), dim=1)
-                _ = prev_event_images.pop(0)
-                prev_event_images.append(event_image)
-                batch_flow = model(cat_event_image) # [1, 2, 480, 640]
-                flow = torch.cat((flow, batch_flow), dim=0)  # [N, 2, 480, 640]
+                    prev_event_image = event_image
+                else:
+                    cat_event_image = torch.cat((prev_event_image,event_image),dim=1)
+                    batch_flow = model(cat_event_image)
+                    flow = torch.cat((flow, batch_flow), dim=0)
+                    prev_event_image = event_image
+            cat_event_image = torch.cat((prev_event_image, prev_event_image))
+            batch_flow = model(cat_event_image)
+            flow = torch.cat((flow, batch_flow), dim=0)
             print("test done")        
     # ------------------
     #  save submission
