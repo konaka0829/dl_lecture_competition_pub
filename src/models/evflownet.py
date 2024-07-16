@@ -10,7 +10,12 @@ class EVFlowNet(nn.Module):
         super(EVFlowNet,self).__init__()
         self._args = args
 
-        self.encoder1 = general_conv2d(in_channels = 4, out_channels=_BASE_CHANNELS, do_batch_norm=not self._args.no_batch_norm)
+        if self._args.multiple_input == True:
+            num_images = 2
+        else:
+            num_images = 1
+
+        self.encoder1 = general_conv2d(in_channels = 4*num_images, out_channels=_BASE_CHANNELS, do_batch_norm=not self._args.no_batch_norm)
         self.encoder2 = general_conv2d(in_channels = _BASE_CHANNELS, out_channels=2*_BASE_CHANNELS, do_batch_norm=not self._args.no_batch_norm)
         self.encoder3 = general_conv2d(in_channels = 2*_BASE_CHANNELS, out_channels=4*_BASE_CHANNELS, do_batch_norm=not self._args.no_batch_norm)
         self.encoder4 = general_conv2d(in_channels = 4*_BASE_CHANNELS, out_channels=8*_BASE_CHANNELS, do_batch_norm=not self._args.no_batch_norm)

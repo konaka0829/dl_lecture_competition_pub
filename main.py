@@ -116,7 +116,7 @@ def main(args: DictConfig):
     # ------------------
     #   optimizer
     # ------------------
-    optimizer = torch.optim.AdamW(model.parameters(), lr=args.train.initial_learning_rate, weight_decay=args.train.weight_decay)
+    optimizer = torch.optim.Adam(model.parameters(), lr=args.train.initial_learning_rate, weight_decay=args.train.weight_decay)
     # ------------------
     #   Start training
     # ------------------
@@ -129,7 +129,7 @@ def main(args: DictConfig):
             event_image_old = batch["event_volume_old"].to(device) # [B, 4, 480, 640]
             event_image_new = batch["event_volume_new"].to(device)
             if args.train.multiple_input == True:
-                event_image = torch.cat((event_image_old,event_image_new),dim=0)
+                event_image = torch.cat((event_image_old,event_image_new),dim=1)
             else:
                 event_image = event_image_old
             ground_truth_flow = batch["flow_gt"].to(device) # [B, 2, 480, 640]
@@ -168,7 +168,7 @@ def main(args: DictConfig):
             event_image_old = batch["event_volume_old"].to(device) 
             event_image_new = batch["event_volume_new"].to(device)
             if args.train.multiple_input == True:
-                event_image = torch.cat((event_image_old,event_image_new),dim=0)
+                event_image = torch.cat((event_image_old,event_image_new),dim=1)
             else:
                 event_image = event_image_old
             batch_flow = model(event_image) # [1, 2, 480, 640]
