@@ -316,10 +316,9 @@ class Sequence(Dataset):
         assert y.max() < self.height
         return rectify_map[y, x]
     
-    def get_data(self, index, crop_window=None, flip=None) -> Dict[str, any]:
-        names = ['event_volume_old', 'event_volume_new']
-        ts_start = [self.timestamps_flow[index] - self.delta_t_us, self.timestamps_flow[index]]
-        ts_end = [self.timestamps_flow[index], self.timestamps_flow[index] + self.delta_t_us]
+    def get_data(self, index) -> Dict[str, any]:
+        ts_start: int = self.timestamps_flow[index] - self.delta_t_us
+        ts_end: int = self.timestamps_flow[index]
 
         file_index = self.indices[index]
 
@@ -331,36 +330,24 @@ class Sequence(Dataset):
         # Save sample for benchmark submission
         output['save_submission'] = file_index in self.idx_to_visualize
         output['visualize'] = self.visualize_samples
-        for i in range(len(names)):
-            event_data = self.event_slicer.get_events(ts_start[i], ts_end[i])
-            p = event_data['p']
-            t = event_data['t']
-            x = event_data['x']
-            y = event_data['y']
+        event_data = self.event_slicer.get_events(
+            ts_start, ts_end)
+        p = event_data['p']
+        t = event_data['t']
+        x = event_data['x']
+        y = event_data['y']
 
-            xy_rect = self.rectify_events(x, y)
-            x_rect = xy_rect[:, 0]
-            y_rect = xy_rect[:, 1]
+        xy_rect = self.rectify_events(x, y)
+        x_rect = xy_rect[:, 0]
+        y_rect = xy_rect[:, 1]
 
-            if crop_window is not None:
-                # Cropping (+- 2 for safety reasons)
-                x_mask = (x_rect >= crop_window['start_x'] - 2) & (
-                            x_rect < crop_window['start_x'] + crop_window['crop_width'] + 2)
-                y_mask = (y_rect >= crop_window['start_y'] - 2) & (
-                            y_rect < crop_window['start_y'] + crop_window['crop_height'] + 2)
-                mask_combined = x_mask & y_mask
-                p = p[mask_combined]
-                t = t[mask_combined]
-                x_rect = x_rect[mask_combined]
-                y_rect = y_rect[mask_combined]
-
-            if self.voxel_grid is None:
-                raise NotImplementedError
-            else:
-                event_representation = self.events_to_voxel_grid(
-                    p, t, x_rect, y_rect)
-                output[names[i]] = event_representation
-            output['name_map'] = self.name_idx
+        if self.voxel_grid is None:
+            raise NotImplementedError
+        else:
+            event_representation = self.events_to_voxel_grid(
+                p, t, x_rect, y_rect)
+            output['event_volume'] = event_representation
+        output['name_map'] = self.name_idx
         
         if self.load_gt:
             output['flow_gt'
